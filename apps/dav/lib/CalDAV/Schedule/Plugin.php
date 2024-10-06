@@ -98,6 +98,13 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 	}
 
 	/**
+	 * Returns an instance of the iTip\Broker.
+	 */
+	protected function createITipBroker(): TipBroker {
+		return new TipBroker();
+	}
+
+	/**
 	 * Allow manual setting of the object change URL
 	 * to support public write
 	 *
