@@ -6,6 +6,7 @@
  */
 namespace OCA\Settings\Controller;
 
+use OC\App\AppManager;
 use OC\App\AppStore\Bundles\BundleFetcher;
 use OC\App\AppStore\Fetcher\AppDiscoverFetcher;
 use OC\App\AppStore\Fetcher\AppFetcher;
@@ -15,7 +16,6 @@ use OC\App\DependencyAnalyzer;
 use OC\App\Platform;
 use OC\Installer;
 use OCP\App\AppPathNotFoundException;
-use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -62,7 +62,7 @@ class AppSettingsController extends Controller {
 		private IL10N $l10n,
 		private IConfig $config,
 		private INavigationManager $navigationManager,
-		private IAppManager $appManager,
+		private AppManager $appManager,
 		private CategoryFetcher $categoryFetcher,
 		private AppFetcher $appFetcher,
 		private IFactory $l10nFactory,
@@ -592,7 +592,10 @@ class AppSettingsController extends Controller {
 		$appId = $this->appManager->cleanAppId($appId);
 		$result = $this->installer->removeApp($appId);
 		if ($result !== false) {
-			$this->appManager->clearAppsCache();
+			$appManager = $this->appManager;
+			// If this app was force enabled, remove the force-enabled-state
+			$appManager->removeOverwriteNextcloudRequirement($appId);
+			$appManager->clearAppsCache();
 			return new JSONResponse(['data' => ['appid' => $appId]]);
 		}
 		return new JSONResponse(['data' => ['message' => $this->l10n->t('Could not remove app.')]], Http::STATUS_INTERNAL_SERVER_ERROR);
@@ -630,8 +633,11 @@ class AppSettingsController extends Controller {
 	}
 
 	public function force(string $appId): JSONResponse {
-		$appId = $this->appManager->cleanAppId($appId);
-		$this->appManager->ignoreNextcloudRequirementForApp($appId);
+		/** @var \OC\App\AppManager $appManager */
+		$appManager = $this->appManager;
+
+		$appId = $appManager->cleanAppId($appId);
+		$appManager->overwriteNextcloudRequirement($appId);
 		return new JSONResponse();
 	}
 }
