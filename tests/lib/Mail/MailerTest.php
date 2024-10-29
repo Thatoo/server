@@ -21,6 +21,7 @@ use OCP\Mail\Events\BeforeMessageSent;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\Mailer as SymfonyMailer;
+use Symfony\Component\Mailer\Transport\NullTransport;
 use Symfony\Component\Mailer\Transport\SendmailTransport;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mime\Email;
@@ -112,6 +113,28 @@ class MailerTest extends TestCase {
 
 		$sendmail = new SendmailTransport('/var/qmail/bin/sendmail' . $binaryParam, null, $this->logger);
 		$this->assertEquals($sendmail, self::invokePrivate($this->mailer, 'getSendMailInstance'));
+	}
+
+	public function testEventForNullTransport(): void {
+		$this->config
+			->expects($this->exactly(1))
+			->method('getSystemValueString')
+			->with('mail_smtpmode', 'smtp')
+			->willReturn('null');
+
+		// $message = $this->createMock(Message::class);
+		$message = $this->createMock(Message::class);
+		$message->expects($this->once())
+			->method('getSymfonyEmail')
+			->willReturn((new Email())->to("foo@bar.com")->from("bar@foo.com")->text(""));
+
+
+		$event = new BeforeMessageSent($message);
+		$this->dispatcher->expects($this->once())
+			->method('dispatchTyped')
+			->with($this->equalTo($event));
+
+		$this->mailer->send($message);
 	}
 
 	public function testGetInstanceDefault(): void {
