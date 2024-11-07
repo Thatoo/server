@@ -249,8 +249,6 @@ class Mailer implements IMailer {
 	}
 
 	protected function getInstance(): MailerInterface {
-		$transport = null;
-
 		switch ($this->config->getSystemValueString('mail_smtpmode', 'smtp')) {
 			case 'sendmail':
 				$transport = $this->getSendMailInstance();
