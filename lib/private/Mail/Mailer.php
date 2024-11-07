@@ -58,8 +58,6 @@ class Mailer implements IMailer {
 
 	public const MAX_LOGO_SIZE = 105;
 
-	private ?MailerInterface $instance = null;
-
 	public function __construct(
 		private IConfig $config,
 		private LoggerInterface $logger,
@@ -251,10 +249,6 @@ class Mailer implements IMailer {
 	}
 
 	protected function getInstance(): MailerInterface {
-		if (!is_null($this->instance)) {
-			return $this->instance;
-		}
-
 		$transport = null;
 
 		switch ($this->config->getSystemValueString('mail_smtpmode', 'smtp')) {
