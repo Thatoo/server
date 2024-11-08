@@ -52,7 +52,7 @@ class PaginateCache {
 			$count++;
 		}
 
-		return [$token, $count];
+		return ['token' => $token, 'count' => $count];
 	}
 
 	/**
