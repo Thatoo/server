@@ -15,7 +15,7 @@ use OCP\IDBConnection;
 use OCP\Security\ISecureRandom;
 
 class PaginateCache {
-	public const TTL = 3600;
+	public const TTL = '1 hour';
 
 	public function __construct(
 		private IDBConnection $database,
@@ -31,14 +31,14 @@ class PaginateCache {
 	 */
 	public function store(string $uri, \Iterator $items): array {
 		$token = $this->random->generate(32);
-		$now = $this->timeFactory->getTime();
+		$now = $this->timeFactory->getDateTime();
 
 		$query = $this->database->getQueryBuilder();
 		$query->insert('dav_page_cache')
 			->values([
 				'url_hash' => $query->createNamedParameter(md5($uri), IQueryBuilder::PARAM_STR),
 				'token' => $query->createNamedParameter($token, IQueryBuilder::PARAM_STR),
-				'insert_time' => $query->createNamedParameter($now, IQueryBuilder::PARAM_INT),
+				'insert_time' => $query->createNamedParameter($now, IQueryBuilder::PARAM_DATETIME_MUTABLE),
 				'result_index' => $query->createParameter('index'),
 				'result_value' => $query->createParameter('value'),
 			]);
@@ -78,11 +78,12 @@ class PaginateCache {
 	}
 
 	public function cleanup(): void {
-		$now = $this->timeFactory->getTime();
+		$now = $this->timeFactory->getDateTime();
+		$minDate = $now->sub(\DateInterval::createFromDateString(self::TTL));
 
 		$query = $this->database->getQueryBuilder();
 		$query->delete('dav_page_cache')
-			->where($query->expr()->lt('insert_time', $query->createNamedParameter($now - self::TTL)));
+			->where($query->expr()->lt('insert_time', $query->createNamedParameter($minDate, IQueryBuilder::PARAM_DATETIME_MUTABLE)));
 		$query->executeStatement();
 	}
 
