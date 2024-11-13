@@ -89,12 +89,12 @@ const getTypePresets = async () => [
 class TypeFilter extends FileListFilter {
 
 	private currentInstance?: Vue
-	private currentPresets?: ITypePreset[]
+	private currentPresets: ITypePreset[]
 	private allPresets?: ITypePreset[]
 
 	constructor() {
 		super('files:type', 10)
-		subscribe('files:navigation:changed', () => this.setPreset())
+		this.currentPresets = []
 	}
 
 	public async mount(el: HTMLElement) {
@@ -103,13 +103,16 @@ class TypeFilter extends FileListFilter {
 			this.allPresets = await getTypePresets()
 		}
 
+		// Already mounted
 		if (this.currentInstance) {
 			this.currentInstance.$destroy()
+			delete this.currentInstance
 		}
 
 		const View = Vue.extend(FileListFilterType as never)
 		this.currentInstance = new View({
 			propsData: {
+				preset: this.currentPresets,
 				typePresets: this.allPresets!,
 			},
 			el,
@@ -142,7 +145,8 @@ class TypeFilter extends FileListFilter {
 	}
 
 	public setPreset(presets?: ITypePreset[]) {
-		this.currentPresets = presets
+		this.currentPresets = presets ?? []
+		this.currentInstance!.$props.preset = presets
 		this.filterUpdated()
 
 		const chips: IFileListFilterChip[] = []
@@ -151,13 +155,22 @@ class TypeFilter extends FileListFilter {
 				chips.push({
 					icon: preset.icon,
 					text: preset.label,
-					onclick: () => this.setPreset(presets.filter(({ id }) => id !== preset.id)),
+					onclick: () => this.removeFilterPreset(preset.id),
 				})
 			}
 		} else {
 			(this.currentInstance as { resetFilter: () => void } | undefined)?.resetFilter()
 		}
 		this.updateChips(chips)
+	}
+
+	/**
+	 * Helper callback that removed a preset from selected.
+	 * This is used when clicking on "remove" on a filter-chip.
+	 */
+	private removeFilterPreset(presetId: string) {
+		const filtered = this.currentPresets.filter(({ id }) => id !== presetId)
+		this.setPreset(filtered)
 	}
 
 }

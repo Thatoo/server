@@ -45,6 +45,10 @@ export default defineComponent({
 	},
 
 	props: {
+		preset: {
+			type: Array as PropType<ITypePreset[]>,
+			default: () => [],
+		},
 		typePresets: {
 			type: Array as PropType<ITypePreset[]>,
 			required: true,
@@ -71,6 +75,10 @@ export default defineComponent({
 	},
 
 	watch: {
+		/** Reset selected options if property is changed */
+		preset() {
+			this.selectedOptions = this.preset || []
+		},
 		selectedOptions(newValue, oldValue) {
 			if (this.selectedOptions.length === 0) {
 				if (oldValue.length !== 0) {
@@ -80,6 +88,10 @@ export default defineComponent({
 				this.$emit('update:preset', this.selectedOptions)
 			}
 		},
+	},
+
+	mounted() {
+		this.selectedOptions = this.preset || []
 	},
 
 	methods: {
