@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 namespace OCA\Files\Listener;
 
+use Exception;
 use OC\FilesMetadata\Model\FilesMetadata;
 use OCA\Files\Service\LivePhotosService;
 use OCP\EventDispatcher\Event;
@@ -19,6 +20,7 @@ use OCP\Files\Events\Node\BeforeNodeCopiedEvent;
 use OCP\Files\Events\Node\BeforeNodeDeletedEvent;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
+use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
@@ -45,39 +47,37 @@ class SyncLivePhotosListener implements IEventListener {
 			return;
 		}
 
-		$peerFileId = null;
+		if ($event instanceof BeforeNodeCopiedEvent || $event instanceof NodeCopiedEvent) {
+			$this->handleCopyRecursive($event, $event->getSource(), $event->getTarget());
+		} else {
+			$peerFileId = null;
 
-		if ($event instanceof BeforeNodeRenamedEvent) {
-			$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getSource()->getId());
-		} elseif ($event instanceof BeforeNodeDeletedEvent) {
-			$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getNode()->getId());
-		} elseif ($event instanceof CacheEntryRemovedEvent) {
-			$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getFileId());
-		} elseif ($event instanceof BeforeNodeCopiedEvent || $event instanceof NodeCopiedEvent) {
-			$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getSource()->getId());
-		}
+			if ($event instanceof BeforeNodeRenamedEvent) {
+				$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getSource()->getId());
+			} elseif ($event instanceof BeforeNodeDeletedEvent) {
+				$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getNode()->getId());
+			} elseif ($event instanceof CacheEntryRemovedEvent) {
+				$peerFileId = $this->livePhotosService->getLivePhotoPeerId($event->getFileId());
+			}
 
-		if ($peerFileId === null) {
-			return; // Not a live photo.
-		}
+			if ($peerFileId === null) {
+				return; // Not a live photo.
+			}
 
-		// Check the user's folder.
-		$peerFile = $this->userFolder->getFirstNodeById($peerFileId);
+			// Check the user's folder.
+			$peerFile = $this->userFolder->getFirstNodeById($peerFileId);
 
-		if ($peerFile === null) {
-			return; // Peer file not found.
-		}
+			if ($peerFile === null) {
+				return; // Peer file not found.
+			}
 
-		if ($event instanceof BeforeNodeRenamedEvent) {
-			$this->handleMove($event, $peerFile, false);
-		} elseif ($event instanceof BeforeNodeDeletedEvent) {
-			$this->handleDeletion($event, $peerFile);
-		} elseif ($event instanceof CacheEntryRemovedEvent) {
-			$peerFile->delete();
-		} elseif ($event instanceof BeforeNodeCopiedEvent) {
-			$this->handleMove($event, $peerFile, true);
-		} elseif ($event instanceof NodeCopiedEvent) {
-			$this->handleCopy($event, $peerFile);
+			if ($event instanceof BeforeNodeRenamedEvent) {
+				$this->handleMove($event->getSource(), $event->getTarget(), $peerFile, false);
+			} elseif ($event instanceof BeforeNodeDeletedEvent) {
+				$this->handleDeletion($event, $peerFile);
+			} elseif ($event instanceof CacheEntryRemovedEvent) {
+				$peerFile->delete();
+			}
 		}
 	}
 
@@ -88,14 +88,7 @@ class SyncLivePhotosListener implements IEventListener {
 	 * of pending renames inside the 'pendingRenames' property,
 	 * to prevent infinite recursive.
 	 */
-	private function handleMove(AbstractNodesEvent $event, Node $peerFile, bool $prepForCopyOnly = false): void {
-		if (!($event instanceof BeforeNodeCopiedEvent) &&
-			!($event instanceof BeforeNodeRenamedEvent)) {
-			return;
-		}
-
-		$sourceFile = $event->getSource();
-		$targetFile = $event->getTarget();
+	private function handleMove(Node $sourceFile, Node $targetFile, Node $peerFile, bool $prepForCopyOnly = false): void {
 		$targetParent = $targetFile->getParent();
 		$sourceExtension = $sourceFile->getExtension();
 		$peerFileExtension = $peerFile->getExtension();
@@ -140,11 +133,9 @@ class SyncLivePhotosListener implements IEventListener {
 	 * @param NodeCopiedEvent $event
 	 * @param Node $peerFile
 	 */
-	private function handleCopy(NodeCopiedEvent $event, Node $peerFile): void {
-		$sourceFile = $event->getSource();
+	private function handleCopy(File $sourceFile, File $targetFile, File $peerFile): void {
 		$sourceExtension = $sourceFile->getExtension();
 		$peerFileExtension = $peerFile->getExtension();
-		$targetFile = $event->getTarget();
 		$targetParent = $targetFile->getParent();
 		$targetName = $targetFile->getName();
 		$peerTargetName = substr($targetName, 0, -strlen($sourceExtension)) . $peerFileExtension;
@@ -192,5 +183,35 @@ class SyncLivePhotosListener implements IEventListener {
 			}
 		}
 		return;
+	}
+
+	/*
+	 * Recursively get all the peer ids of a live photo.
+	 * Needed when coping a folder.
+	 */
+	private function handleCopyRecursive(Event $event, Node $sourceNode, Node $targetNode): void {
+		if ($sourceNode instanceof Folder && $targetNode instanceof Folder) {
+			foreach ($sourceNode->getDirectoryListing() as $sourceChild) {
+				$targetNode = $targetNode->get($sourceChild->getName());
+				$this->handleCopyRecursive($event, $sourceChild, $targetNode);
+			}
+		} else if ($sourceNode instanceof File && $targetNode instanceof File) {
+			$peerFileId = $this->livePhotosService->getLivePhotoPeerId($sourceNode->getId());
+			if ($peerFileId === null) {
+				return;
+			}
+			$peerFile = $this->userFolder->getFirstNodeById($peerFileId);
+			if ($peerFile === null) {
+				return;
+			}
+
+			if ($event instanceof BeforeNodeCopiedEvent) {
+				$this->handleMove($sourceNode, $targetNode, $peerFile, true);
+			} elseif ($event instanceof NodeCopiedEvent) {
+				$this->handleCopy($sourceNode, $targetNode, $peerFile);
+			}
+		} else {
+			throw new Exception('Source and target type are not matching');
+		}
 	}
 }
