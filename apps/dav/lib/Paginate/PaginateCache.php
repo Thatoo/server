@@ -27,7 +27,7 @@ class PaginateCache {
 	/**
 	 * @param string $uri
 	 * @param \Iterator $items
-	 * @return array{'token': int, 'count': int}
+	 * @return array{'token': string, 'count': int}
 	 */
 	public function store(string $uri, \Iterator $items): array {
 		$token = $this->random->generate(32);
@@ -45,7 +45,7 @@ class PaginateCache {
 
 		$count = 0;
 		foreach ($items as $item) {
-			$value = json_encode($item);
+			$value = serialize($item);
 			$query->setParameter('index', $count, IQueryBuilder::PARAM_INT);
 			$query->setParameter('value', $value);
 			$query->executeStatement();
@@ -73,7 +73,7 @@ class PaginateCache {
 
 		$result = $query->executeQuery();
 		return array_map(function (string $entry) {
-			return json_decode($entry, true);
+			return unserialize($entry);
 		}, $result->fetchAll(\PDO::FETCH_COLUMN));
 	}
 

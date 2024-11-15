@@ -15,11 +15,11 @@ use Sabre\HTTP\RequestInterface;
 use Sabre\HTTP\ResponseInterface;
 
 class PaginatePlugin extends ServerPlugin {
-	public const PAGINATE_HEADER = 'x-nc-paginate';
-	public const PAGINATE_TOTAL_HEADER = 'x-nc-paginate-total';
-	public const PAGINATE_TOKEN_HEADER = 'x-nc-paginate-token';
-	public const PAGINATE_OFFSET_HEADER = 'x-nc-paginate-offset';
-	public const PAGINATE_COUNT_HEADER = 'x-nc-paginate-count';
+	public const PAGINATE_HEADER = 'X-NC-Paginate';
+	public const PAGINATE_TOTAL_HEADER = 'X-NC-Paginate-Total';
+	public const PAGINATE_TOKEN_HEADER = 'X-NC-Paginate-Token';
+	public const PAGINATE_OFFSET_HEADER = 'X-NC-Paginate-Offset';
+	public const PAGINATE_COUNT_HEADER = 'X-NC-Paginate-Count';
 
 	/** @var Server */
 	private $server;
@@ -60,7 +60,7 @@ class PaginatePlugin extends ServerPlugin {
 			$fileProperties = $copyIterator->getFirstItems();
 			$this->server->httpResponse->addHeader(self::PAGINATE_HEADER, 'true');
 			$this->server->httpResponse->addHeader(self::PAGINATE_TOKEN_HEADER, $token);
-			$this->server->httpResponse->addHeader(self::PAGINATE_TOTAL_HEADER, $count);
+			$this->server->httpResponse->addHeader(self::PAGINATE_TOTAL_HEADER, (string)$count);
 		}
 	}
 
@@ -86,6 +86,7 @@ class PaginatePlugin extends ServerPlugin {
 
 			$data = $this->server->generateMultiStatus($items, $minimal);
 			$response->setBody($data);
+
 			return false;
 		}
 	}
