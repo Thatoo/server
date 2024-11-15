@@ -8,11 +8,59 @@ import type { RenamingStore } from '../types'
 import axios, { isAxiosError } from '@nextcloud/axios'
 import { emit, subscribe } from '@nextcloud/event-bus'
 import { NodeStatus } from '@nextcloud/files'
+import { DialogBuilder } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
-import { basename, dirname } from 'path'
+import { basename, dirname, extname } from 'path'
 import { defineStore } from 'pinia'
 import logger from '../logger'
 import Vue from 'vue'
+import IconCancel from '@mdi/svg/svg/cancel.svg?raw'
+import IconCheck from '@mdi/svg/svg/check.svg?raw'
+
+let isDialogVisible = false
+
+const showWarningDialog = (oldExtension: string, newExtension: string): Promise<boolean> => {
+	if (isDialogVisible) {
+		return Promise.resolve(false)
+	}
+
+	isDialogVisible = true
+
+	return new Promise((resolve) => {
+		const dialog = new DialogBuilder()
+			.setName(t('files', 'Extension Change Warning'))
+			.setText(t(
+				'files',
+				'You are attempting to change the file extension from "{old}" to "{new}". This may affect how the file is handled. Do you want to proceed?',
+				{ old: oldExtension || t('files', 'none'), new: newExtension || t('files', 'none') },
+			))
+			.setButtons([
+				{
+					label: t('files', 'Cancel'),
+					icon: IconCancel,
+					type: 'secondary',
+					callback: () => {
+						isDialogVisible = false
+						resolve(false)
+					},
+				},
+				{
+					label: t('files', 'Proceed'),
+					icon: IconCheck,
+					type: 'primary',
+					callback: () => {
+						isDialogVisible = false
+						resolve(true)
+					},
+				},
+			])
+			.build()
+
+		dialog.show().then(() => {
+			dialog.hide()
+		})
+	})
+}
 
 export const useRenamingStore = function(...args) {
 	const store = defineStore('renaming', {
@@ -36,6 +84,18 @@ export const useRenamingStore = function(...args) {
 				const newName = this.newName.trim?.() || ''
 				const oldName = this.renamingNode.basename
 				const oldEncodedSource = this.renamingNode.encodedSource
+
+				// Check for extension change
+				const oldExtension = extname(oldName)
+				const newExtension = extname(newName)
+				if (oldExtension !== newExtension) {
+					const proceed = await showWarningDialog(oldExtension, newExtension)
+					if (!proceed) {
+						// User canceled, abort the operation
+						return false
+					}
+				}
+
 				if (oldName === newName) {
 					return false
 				}
